@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from torch.nn import GRUCell
 from torch_geometric.data import Data
-from torch_geometric.nn import MessagePassing
+from torch_geometric.nn import MessagePassing, global_max_pool
 
 
 class GGNNLayer(MessagePassing):
@@ -27,25 +27,38 @@ class GGNN(nn.Module):
         self.dropout = nn.Dropout(dropout)
         self.dense = nn.Linear(hidden_size, hidden_size)
 
-    def forward(self, x, edge_index):
+    def forward(self, x, edge_index, batch):
         for m in self.mod_list:
             x = m(x, edge_index)
         x = self.dropout(x)
         x = self.dense(x)
-        x = x.max(dim=0).values
+        x = global_max_pool(x, batch)
         return x
 
 
 class ESPI_MSG_MODEL(nn.Module):
+    """
+    An toy example:
+    ```
+        model = ESPI_MSG_MODEL(hidden_size=96, layer_num=2, dropout=0.1)
+
+        dataset = YourDataset()
+        loader = DataLoader(dataset, batch_size=32)
+        for data in loader:
+            x, edge_index, batch = data.x, data.edge_index, data.batch
+            pred = model(x, edge_index, batch)
+    ```
+    """
     def __init__(self, hidden_size, layer_num, dropout=0.1) -> None:
         super().__init__()
         self.ggnn = GGNN(hidden_size, layer_num, dropout)
         self.clf = nn.Linear(hidden_size, 1)
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, x, edge_index):
-        x = self.ggnn(x, edge_index)
+    def forward(self, x, edge_index, batch):
+        x = self.ggnn(x, edge_index, batch)
         x = self.dropout(x)
         x = self.clf(x)
         x = torch.sigmoid(x)
+        x = x.squeeze()
         return x
