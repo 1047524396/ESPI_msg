@@ -112,7 +112,7 @@ def run(db ,fold_num):
     predicted_classes = []
     test_list = []
     for i in range(len(test_data)):
-        if test_data['msg'] != "":
+        if test_data['msg'][i] != "":
             test_list.append(test_data['label'][i])
     for data in test_loader:                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
         data = data.to(device)
@@ -129,7 +129,7 @@ def run(db ,fold_num):
     test_list = []
     count = 0
     for i in tqdm(range(len(test_data_other))):
-        if test_data_other['msg'] != "":
+        if test_data_other['msg'][i] != "":
             test_list.append(test_data_other['label'][i])
             count +=1
         else: print(i)
