@@ -12,12 +12,16 @@ from sklearn.metrics import classification_report
 import dill
 from load_dataset import load_fold_dataset,load_whole_dataset
 from espi_model import ESPI_MSG_MODEL
+import numpy as np
+import re
 
-def embedding(long_text):
-    nlp = spacy.load("en_core_web_sm")
+def embedding(long_text , nlp):
+    
     # 创建节点特征 x
     doc = nlp(long_text)
-    lines = long_text.splitlines()
+    lines = re.split(r'[.\n]', long_text)
+    lines = [lines.strip() for lines in lines if lines.strip()]
+    #lines = long_text.splitlines()
     x = torch.zeros(len(doc), 96)
 
     i = 0
@@ -42,11 +46,13 @@ def embedding(long_text):
 
 def embedding_data(data ,batch_size):
     data_list = []
-    for i in tqdm(range(len(data))):#len(data)
-        text = data["msg"][i]
+    nlp = spacy.load("en_core_web_sm")
+    msg = data['msg']
+    for i in tqdm(range(len(msg))):#len(data)
+        text = msg[i]
         if text == "":
             continue
-        x, edge_index = embedding(text)
+        x, edge_index = embedding(text , nlp)
         data_list.append(Data(x = x, edge_index=edge_index, y = data["label"][i]))
     loader = DataLoader(data_list, batch_size=batch_size)
     return loader
@@ -63,7 +69,6 @@ def load_loader(filename , data ,batch_size):
 
 def run(db ,fold_num):
     torch.manual_seed(128)
-
     spidb = 'spidb'
     patchdb = 'patchdb'
     if db == spidb:
@@ -74,12 +79,12 @@ def run(db ,fold_num):
         testdb = spidb    
     train_data, test_data = load_fold_dataset("5_fold_datasets", traindb, fold_num)
     test_data_other =  load_whole_dataset("5_fold_datasets", testdb)
-    batch_size = 128
-    filename = traindb + '_train_'+ str(fold_num) + ',pkl'
+    batch_size = 512
+    filename = traindb + '_train_'+ str(fold_num) + '.pkl'
     train_loader = load_loader(filename , train_data, batch_size)  
-    filename = traindb + '_test_'+ str(fold_num) + ',pkl'
+    filename = traindb + '_test_'+ str(fold_num) + '.pkl'
     test_loader = load_loader(filename , test_data, batch_size) 
-    filename = testdb + '_test_'+ 'whole' + ',pkl'
+    filename = testdb + '_test_'+ 'whole' + '.pkl'
     other_loader = load_loader(filename , test_data_other, batch_size) 
 
     # 为了在 GPU 上训练，将模型和数据移到 GPU 上
@@ -87,15 +92,16 @@ def run(db ,fold_num):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
 
-    num_epochs = 30
+    num_epochs = 100
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-
+    best_loss = 999999.9
+    loss_times = 0 
     # 训练循环
     for epoch in range(num_epochs):
         model.train()
         total_loss = 0
-        for data in test_loader:
+        for data in train_loader:
             data = data.to(device)  # 将数据移到 GPU 上
             optimizer.zero_grad()
             out = model(data.x, data.edge_index , data.batch)  # 前向传播
@@ -105,15 +111,26 @@ def run(db ,fold_num):
             total_loss += loss.item()
 
         avg_loss = total_loss / len(train_loader)
+        if avg_loss < best_loss:
+            best_loss = avg_loss
+            loss_times = 0
+        else:
+            loss_times += 1
+        if loss_times >= 10:
+            print("early stop : no improvements for 10 epochs")
+            break
+
         print(f'Epoch [{epoch + 1}/{num_epochs}], Loss: {avg_loss:.4f}')
             
     torch.save(model, "model_"+ traindb +str(fold_num)+".pt")
     
     predicted_classes = []
     test_list = []
+    msg = test_data['msg']
+    label = test_data['label']
     for i in range(len(test_data)):
-        if test_data['msg'][i] != "":
-            test_list.append(test_data['label'][i])
+        if msg[i] != "":
+            test_list.append(label[i])
     for data in test_loader:                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
         data = data.to(device)
         pred = model(data.x, data.edge_index, data.batch)
@@ -122,18 +139,16 @@ def run(db ,fold_num):
         for i in range(len(res)):
             predicted_classes.append(round(res[i]))
             
-    report = classification_report(test_list, predicted_classes)   
-    print(report)
+    report1 = classification_report(test_list, predicted_classes, output_dict=True)   
+    print(report1)
 
     predicted_classes = []
     test_list = []
-    count = 0
-    for i in tqdm(range(len(test_data_other))):
-        if test_data_other['msg'][i] != "":
-            test_list.append(test_data_other['label'][i])
-            count +=1
-        else: print(i)
-    print(count)
+    msg = test_data_other['msg']
+    label = test_data_other['label']
+    for i in range(len(test_data_other)):
+        if msg[i] != "":
+            test_list.append(label[i])
     for data in other_loader:                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
         data = data.to(device)
         pred = model(data.x, data.edge_index, data.batch)
@@ -143,8 +158,10 @@ def run(db ,fold_num):
             predicted_classes.append(round(res[i]))
             
             
-    report = classification_report(test_list, predicted_classes)   
-    print(report)
+    report2 = classification_report(test_list, predicted_classes, output_dict=True)   #output_dict=True
+    print(report2)
+    return report1 , report2
 
 if __name__ == "__main__":
-    run('spidb',0)
+    for i in range(5):
+        report1 , report2 = run('spidb', i)
