@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 from torch.nn import GRUCell
-from torch_geometric.data import Data
 from torch_geometric.nn import MessagePassing, global_max_pool
 
 
@@ -49,13 +48,16 @@ class ESPI_MSG_MODEL(nn.Module):
             pred = model(x, edge_index, batch)
     ```
     """
-    def __init__(self, hidden_size, layer_num, dropout=0.1) -> None:
+
+    def __init__(self, hidden_size, layer_num, token_num, dropout=0.1) -> None:
         super().__init__()
+        self.emb = nn.Embedding(token_num, hidden_size)
         self.ggnn = GGNN(hidden_size, layer_num, dropout)
         self.clf = nn.Linear(hidden_size, 1)
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x, edge_index, batch):
+        x = self.emb(x)
         x = self.ggnn(x, edge_index, batch)
         x = self.dropout(x)
         x = self.clf(x)
