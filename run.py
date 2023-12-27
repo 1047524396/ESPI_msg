@@ -55,7 +55,7 @@ def train(
     token_num = len(token_list)
 
     model = ESPI_MSG_MODEL(
-        hidden_size=128, layer_num=2, token_num=token_num, dropout=0.1
+        hidden_size=128, layer_num=1, token_num=token_num, dropout=0.1
     )
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
@@ -69,8 +69,11 @@ def train(
     model.train()
     logger.info("Start training")
 
+    best_acc, best_for_epoch = 0, 0
+
     global_step = 0
     for epoch in range(num_epochs):
+        acc_list = []
         for data in tqdm(train_loader, desc=f"Epoch {epoch}"):
             global_step += 1
 
@@ -84,8 +87,18 @@ def train(
             loss.backward()
             optimizer.step()
 
+            pred = torch.round(out).long().tolist()
+            gt = data.y.tolist()
+            acc, pre, rec, f1 = calc_metrics(pred, gt)
+
+            acc_list.append(acc)
+
             if global_step % log_step == 0:
                 writer.add_scalar("Loss/train", loss, global_step)
+                writer.add_scalar("Accuracy/train", acc, global_step)
+                writer.add_scalar("Precision/train", pre, global_step)
+                writer.add_scalar("Recall/train", rec, global_step)
+                writer.add_scalar("F1/train", f1, global_step)
 
             if test_loader and global_step % test_step == 0:
                 acc, pre, rec, f1 = test_loader_on_model(test_loader, model)[0]
@@ -95,10 +108,25 @@ def train(
                 writer.add_scalar("Recall/test", rec, global_step)
                 writer.add_scalar("F1/test", f1, global_step)
 
+                logger.info(f"Test result: acc: {acc}, pre: {pre}, rec: {rec}, f1: {f1}")
+        
+        epoch_acc = sum(acc_list) / len(acc_list)
+        logger.info(f"Epoch {epoch} finished, acc: {epoch_acc} (best: {best_acc})")
+
+        if epoch_acc > best_acc:
+            best_acc = epoch_acc
+            best_for_epoch = 0
+        else:
+            best_for_epoch += 1
+            if best_for_epoch >= 10:
+                logger.info(f"Early stop at epoch {epoch}")
+                break
+
     writer.close()
 
     model_path = output_path / "model.pt"
     torch.save(model, model_path)
+    logger.info(f"Model saved to {model_path}")
 
     return model
 

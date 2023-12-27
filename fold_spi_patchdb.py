@@ -31,7 +31,7 @@ if __name__ == "__main__":
     folds_data_dir = "5_fold_datasets"
     fold_num = 5
 
-    for train_dataset_name in dataset_names:
+    for train_dataset_name in ["patchdb", "spidb"]:
         cross_dataset_name = (dataset_names - {train_dataset_name}).pop()
         for fold_idx in range(fold_num):
             fold_name = f"{train_dataset_name}_fold_{fold_idx}"
@@ -50,6 +50,9 @@ if __name__ == "__main__":
                 num_epochs=30,
                 output_path=fold_output_dir,
                 log_filename=fold_name,
+                test_data=test_dataset,
+                test_data_filename="same",
+                test_step=500,
             )
 
             (acc, pre, rec, f1), (logits, gts) = test(

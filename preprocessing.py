@@ -97,11 +97,11 @@ def build_train_loader(train_data, model_dir, name="train_data"):
     )
 
     token_list = list(itertools.chain.from_iterable(tokens))
-    token_list = [t.lower() for t in token_list if not re.match(r"^\s*$", t)]
+    # token_list = [t.lower() for t in token_list if not re.match(r"^\s*$", t)]
 
-    # filter token that appear only 1 time
-    c = Counter(token_list)
-    token_list = list(set([t for t in token_list if c[t] > 1]))
+    # c = Counter(token_list)
+    # token_list = list(set([t for t in token_list if c[t] > 1]))
+    token_list = list(set(token_list))
     token_list.append("<unk>")
     logger.info(f"Num of Tokens size: {len(token_list)}")
 

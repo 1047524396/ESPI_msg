@@ -18,6 +18,6 @@ def calc_metrics(preds, gt):
     acc = (tp + tn) / (tp + tn + fp + fn)
     pre = tp / (tp + fp) if tp + fp != 0 else float('nan') 
     rec = tp / (tp + fn) if tp + fn != 0 else float('nan')
-    f1 = 2 * pre * rec / (pre + rec)
+    f1 = 2 * pre * rec / (pre + rec) if pre + rec != 0 else float('nan')
 
     return acc, pre, rec, f1
